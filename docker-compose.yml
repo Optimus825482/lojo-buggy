@@ -8,22 +8,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: buggy-shuttle-app
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-buggy_shuttle}
-      - TRACCAR_URL=${TRACCAR_URL:-https://traccar.optimistdemo.cloud}
-      - TRACCAR_USER=${TRACCAR_USER:-admin}
-      - TRACCAR_PASSWORD=${TRACCAR_PASSWORD:-admin}
-      - PUBLIC_APP_NAME=${PUBLIC_APP_NAME:-Lujo Buggy Shuttle}
-      - PUBLIC_MAP_CENTER_LAT=${PUBLIC_MAP_CENTER_LAT:-37.1385641}
-      - PUBLIC_MAP_CENTER_LNG=${PUBLIC_MAP_CENTER_LNG:-27.5607023}
-      - PUBLIC_MAP_ZOOM=${PUBLIC_MAP_ZOOM:-17}
-      - GEOFENCE_DEFAULT_RADIUS=${GEOFENCE_DEFAULT_RADIUS:-15}
-      - GPS_UPDATE_INTERVAL=${GPS_UPDATE_INTERVAL:-10000}
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-buggy_shuttle}
+      TRACCAR_URL: ${TRACCAR_URL:-https://traccar.optimistdemo.cloud}
+      TRACCAR_USER: ${TRACCAR_USER:-admin}
+      TRACCAR_PASSWORD: ${TRACCAR_PASSWORD:-admin}
+      PUBLIC_APP_NAME: ${PUBLIC_APP_NAME:-Lujo Buggy Shuttle}
+      PUBLIC_MAP_CENTER_LAT: ${PUBLIC_MAP_CENTER_LAT:-37.1385641}
+      PUBLIC_MAP_CENTER_LNG: ${PUBLIC_MAP_CENTER_LNG:-27.5607023}
+      PUBLIC_MAP_ZOOM: ${PUBLIC_MAP_ZOOM:-17}
+      GEOFENCE_DEFAULT_RADIUS: ${GEOFENCE_DEFAULT_RADIUS:-15}
+      GPS_UPDATE_INTERVAL: ${GPS_UPDATE_INTERVAL:-10000}
     depends_on:
       db:
         condition: service_healthy
@@ -46,31 +45,26 @@ services:
 
   db:
     image: postgres:16-alpine
-    container_name: buggy-shuttle-db
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-buggy_shuttle}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-buggy_shuttle}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - buggy-network
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-buggy_shuttle}",
-        ]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 30s
 
 networks:
   buggy-network:
     driver: bridge
 
 volumes:
-  postgres_data:
+  postgres-data:
