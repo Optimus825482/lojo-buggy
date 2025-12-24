@@ -152,6 +152,41 @@ export const POST: RequestHandler = async ({ request, url }) => {
               }
             }
 
+            // En yakın durağı bul (geofence kontrolü için)
+            let nearestStopId: number | null = null;
+            let nearestStopDistance = Infinity;
+
+            for (const stop of stops) {
+              const distance = calculateDistance(
+                { lat: finalLat, lng: finalLng },
+                { lat: stop.lat, lng: stop.lng }
+              );
+              const geofenceRadius = stop.geofenceRadius || 15;
+
+              if (
+                distance <= geofenceRadius &&
+                distance < nearestStopDistance
+              ) {
+                nearestStopId = stop.id;
+                nearestStopDistance = distance;
+              }
+            }
+
+            // Durum belirleme mantığı:
+            // - Cihaz online ve araç offline ise → available yap
+            // - Cihaz offline ise → offline yap
+            // - Diğer durumlarda mevcut durumu koru (busy, maintenance vb.)
+            let newStatus = vehicle.status;
+
+            if (device?.status === "online") {
+              if (vehicle.status === "offline") {
+                newStatus = "available";
+              }
+              // busy veya maintenance ise değiştirme
+            } else {
+              newStatus = "offline";
+            }
+
             const [updated] = await db
               .update(schema.vehicles)
               .set({
@@ -159,14 +194,11 @@ export const POST: RequestHandler = async ({ request, url }) => {
                 lng: finalLng,
                 speed: traccar.knotsToKmh(position.speed),
                 heading: finalHeading,
-                gpsSignal: true,
-                status:
-                  device?.status === "online"
-                    ? vehicle.status === "offline"
-                      ? "available"
-                      : vehicle.status
-                    : "offline",
+                gpsSignal: device?.status === "online",
+                status: newStatus,
                 lastUpdate: new Date(position.serverTime),
+                lastTraccarUpdate: new Date(),
+                lastGeofenceStopId: nearestStopId,
                 updatedAt: new Date(),
               })
               .where(eq(schema.vehicles.id, vehicle.id))

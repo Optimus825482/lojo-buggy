@@ -208,13 +208,98 @@
     }
   }
 
-  // Traccar toggle
+  // Traccar SSE bağlantısı
+  let traccarEventSource: EventSource | null = null;
+  let traccarRealtimeConnected = $state(false);
+
+  // Traccar toggle - SSE ile gerçek zamanlı takip
   function toggleTraccar() {
     traccarEnabled = !traccarEnabled;
     if (traccarEnabled) {
       checkTraccarStatus();
       syncTraccarPositions();
+      startTraccarStream();
+    } else {
+      stopTraccarStream();
     }
+  }
+
+  // SSE stream başlat
+  function startTraccarStream() {
+    if (traccarEventSource) {
+      traccarEventSource.close();
+    }
+    
+    traccarEventSource = new EventSource('/api/traccar/stream');
+    
+    traccarEventSource.addEventListener('connected', () => {
+      traccarRealtimeConnected = true;
+      console.log('[Traccar SSE] Connected');
+    });
+    
+    traccarEventSource.addEventListener('disconnected', () => {
+      traccarRealtimeConnected = false;
+      console.log('[Traccar SSE] Disconnected');
+    });
+    
+    traccarEventSource.addEventListener('position', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        // Araç konumunu güncelle
+        const vehicleIndex = vehicles.findIndex(v => v.id === data.vehicleId);
+        if (vehicleIndex !== -1) {
+          vehicles[vehicleIndex] = {
+            ...vehicles[vehicleIndex],
+            lat: data.lat,
+            lng: data.lng,
+            speed: data.speed,
+            heading: data.heading,
+            lastUpdate: data.timestamp
+          };
+          // Marker'ı güncelle
+          updateMarkers();
+          updateVehicleRouteLine();
+        }
+      } catch (e) {
+        console.error('[Traccar SSE] Position parse error:', e);
+      }
+    });
+    
+    traccarEventSource.addEventListener('device', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        // Araç durumunu güncelle
+        const vehicleIndex = vehicles.findIndex(v => v.id === data.vehicleId);
+        if (vehicleIndex !== -1) {
+          vehicles[vehicleIndex] = {
+            ...vehicles[vehicleIndex],
+            status: data.status,
+            gpsSignal: data.deviceStatus === 'online'
+          };
+          updateMarkers();
+        }
+      } catch (e) {
+        console.error('[Traccar SSE] Device parse error:', e);
+      }
+    });
+    
+    traccarEventSource.addEventListener('error', () => {
+      traccarRealtimeConnected = false;
+      console.error('[Traccar SSE] Error');
+    });
+    
+    traccarEventSource.onerror = () => {
+      traccarRealtimeConnected = false;
+    };
+  }
+  
+  // SSE stream durdur
+  function stopTraccarStream() {
+    if (traccarEventSource) {
+      traccarEventSource.close();
+      traccarEventSource = null;
+    }
+    traccarRealtimeConnected = false;
   }
 
   function hasPendingCall(stopId: number): boolean {
@@ -1178,6 +1263,8 @@
       // Simülasyonları temizle
       activeSimulations.forEach(sim => clearInterval(sim.interval));
       activeSimulations.clear();
+      // Traccar SSE bağlantısını kapat
+      stopTraccarStream();
     };
   });
 </script>
@@ -1189,16 +1276,50 @@
     {#if showStats}
       <div class="px-4 py-2 flex items-center justify-between gap-4 border-b border-slate-700/50">
         <div class="flex items-center gap-2">
+          <!-- Manuel Konum Güncelleme Butonu -->
+          <button 
+            onclick={async () => {
+              if (traccarSyncing) return;
+              traccarSyncing = true;
+              try {
+                const res = await fetch('/api/traccar/sync', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                  appStore.addNotification('success', 'Güncellendi', `${data.data.updatedCount} araç konumu güncellendi`);
+                  await fetchData();
+                } else {
+                  appStore.addNotification('error', 'Hata', data.message || 'Güncelleme başarısız');
+                }
+              } catch (err) {
+                appStore.addNotification('error', 'Hata', 'Bağlantı hatası');
+              } finally {
+                traccarSyncing = false;
+              }
+            }}
+            disabled={traccarSyncing}
+            class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all bg-slate-700/50 text-slate-300 hover:bg-slate-600 hover:text-white disabled:opacity-50"
+            title="Araç Konumlarını Güncelle"
+          >
+            {#if traccarSyncing}
+              <span class="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></span>
+            {:else}
+              <span class="text-sm">🔄</span>
+            {/if}
+          </button>
           <div class="w-2 h-2 rounded-full {appStore.isDemo ? 'bg-yellow-500' : 'bg-green-500'} animate-pulse"></div>
           <!-- Traccar Toggle -->
           <button 
             onclick={toggleTraccar}
             class="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-all {traccarEnabled ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}"
-            title="Traccar Canlı Takip"
+            title="Traccar Canlı Takip {traccarRealtimeConnected ? '(Bağlı)' : ''}"
           >
             <span class="text-sm">📡</span>
             {#if traccarEnabled}
-              <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+              {#if traccarRealtimeConnected}
+                <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" title="Gerçek zamanlı bağlı"></span>
+              {:else}
+                <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" title="Bağlanıyor..."></span>
+              {/if}
             {/if}
           </button>
           <button onclick={() => showStats = false} class="p-1 text-slate-500 hover:text-white" title="Gizle">✕</button>
@@ -1382,7 +1503,7 @@
       
       <!-- Selected Vehicle Info Card - Sağ Üst Köşe -->
       {#if selectedVehicleInfo}
-        <div class="absolute top-4 left-4 z-20 bg-slate-800/95 backdrop-blur-sm border border-slate-600 rounded-xl shadow-2xl p-4 min-w-[200px]">
+        <div class="absolute top-4 left-4 z-20 bg-slate-800/95 backdrop-blur-sm border border-slate-600 rounded-xl shadow-2xl p-4 min-w-[220px]">
           <div class="flex items-center justify-between mb-2">
             <h3 class="font-bold text-white text-lg flex items-center gap-2">
               <span class="text-2xl">🚐</span>
@@ -1403,6 +1524,31 @@
               {selectedVehicleInfo.task ? (selectedVehicleInfo.task.status === 'pickup' && !selectedVehicleInfo.task.dropoffStopId ? 'Hedef Bekliyor' : 'Görevde') : (selectedVehicleInfo.vehicle.status === 'available' ? 'Müsait' : selectedVehicleInfo.vehicle.status === 'busy' ? 'Görevde' : 'Çevrimdışı')}
             </span>
           </div>
+          
+          <!-- Konum Bilgisi -->
+          <div class="mt-3 pt-3 border-t border-slate-600 space-y-1.5">
+            <div class="flex items-center gap-2 text-xs">
+              <span class="text-slate-500">📍 Konum:</span>
+              <span class="text-slate-300 font-mono">{selectedVehicleInfo.vehicle.lat?.toFixed(6)}, {selectedVehicleInfo.vehicle.lng?.toFixed(6)}</span>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+              <span class="text-slate-500">🚀 Hız:</span>
+              <span class="text-slate-300">{selectedVehicleInfo.vehicle.speed?.toFixed(1) || 0} km/h</span>
+            </div>
+            {#if selectedVehicleInfo.vehicle.lastUpdate}
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-slate-500">🕐 Son Güncelleme:</span>
+                <span class="text-slate-300">{new Date(selectedVehicleInfo.vehicle.lastUpdate).toLocaleTimeString('tr-TR')}</span>
+              </div>
+            {/if}
+            {#if selectedVehicleInfo.vehicle.gpsSignal !== undefined}
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-slate-500">📶 GPS:</span>
+                <span class="{selectedVehicleInfo.vehicle.gpsSignal ? 'text-green-400' : 'text-red-400'}">{selectedVehicleInfo.vehicle.gpsSignal ? 'Aktif' : 'Yok'}</span>
+              </div>
+            {/if}
+          </div>
+          
           {#if selectedVehicleInfo.targetStop}
             <div class="mt-3 pt-3 border-t border-slate-600">
               <p class="text-cyan-400 font-medium text-sm">{selectedVehicleInfo.targetStop}</p>

@@ -2,6 +2,13 @@
   import { onMount } from 'svelte';
   import { appStore } from '$lib/stores/app.svelte';
   
+  interface TraccarDevice {
+    id: number;
+    name: string;
+    uniqueId: string;
+    status: string;
+  }
+  
   interface Vehicle {
     id: number;
     name: string;
@@ -13,10 +20,14 @@
     lastSeen: Date;
     totalTrips: number;
     todayTrips: number;
+    traccarId: number | null;
+    traccarDevice?: TraccarDevice | null;
   }
   
   let vehicles = $state<Vehicle[]>([]);
+  let unlinkedDevices = $state<TraccarDevice[]>([]);
   let loading = $state(true);
+  let loadingTraccar = $state(false);
   let showAddModal = $state(false);
   let showEditModal = $state(false);
   let selectedVehicle = $state<Vehicle | null>(null);
@@ -25,7 +36,8 @@
   let formData = $state({
     name: '',
     plateNumber: '',
-    status: 'available' as Vehicle['status']
+    status: 'available' as Vehicle['status'],
+    traccarId: null as number | null
   });
   
   async function fetchVehicles() {
@@ -38,9 +50,13 @@
           ...v,
           lastSeen: new Date(v.lastSeen || v.updatedAt),
           totalTrips: v.totalTrips || Math.floor(Math.random() * 500),
-          todayTrips: v.todayTrips || Math.floor(Math.random() * 20)
+          todayTrips: v.todayTrips || Math.floor(Math.random() * 20),
+          traccarId: v.traccarId || null,
+          traccarDevice: null
         }));
       }
+      // Traccar eşleştirme bilgilerini de çek
+      await fetchTraccarMappings();
     } catch (err) {
       console.error('Araçlar yüklenemedi:', err);
       appStore.addNotification('error', 'Hata', 'Araçlar yüklenemedi');
@@ -49,8 +65,36 @@
     }
   }
   
+  async function fetchTraccarMappings() {
+    loadingTraccar = true;
+    try {
+      const res = await fetch('/api/traccar/sync');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          // Eşleştirilmemiş cihazları kaydet
+          unlinkedDevices = data.data.unlinkedDevices || [];
+          
+          // Araçlara Traccar cihaz bilgilerini ekle
+          const mappings = data.data.mappings || [];
+          vehicles = vehicles.map(v => {
+            const mapping = mappings.find((m: any) => m.vehicleId === v.id);
+            return {
+              ...v,
+              traccarDevice: mapping?.traccarDevice || null
+            };
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Traccar bilgileri yüklenemedi:', err);
+    } finally {
+      loadingTraccar = false;
+    }
+  }
+  
   function openAddModal() {
-    formData = { name: '', plateNumber: '', status: 'available' };
+    formData = { name: '', plateNumber: '', status: 'available', traccarId: null };
     showAddModal = true;
   }
   
@@ -59,7 +103,8 @@
     formData = {
       name: vehicle.name,
       plateNumber: vehicle.plateNumber,
-      status: vehicle.status
+      status: vehicle.status,
+      traccarId: vehicle.traccarId
     };
     showEditModal = true;
   }
@@ -88,21 +133,62 @@
     if (!selectedVehicle) return;
     
     try {
+      // Önce araç bilgilerini güncelle
       const res = await fetch(`/api/vehicles/${selectedVehicle.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          name: formData.name,
+          plateNumber: formData.plateNumber,
+          status: formData.status
+        })
       });
       
-      if (res.ok) {
-        appStore.addNotification('success', 'Başarılı', 'Araç güncellendi');
-        showEditModal = false;
-        fetchVehicles();
-      } else {
+      if (!res.ok) {
         throw new Error('Araç güncellenemedi');
       }
-    } catch (err) {
-      appStore.addNotification('error', 'Hata', 'Araç güncellenemedi');
+      
+      // Traccar eşleştirmesi değiştiyse
+      const oldTraccarId = selectedVehicle.traccarId;
+      const newTraccarId = formData.traccarId;
+      
+      if (oldTraccarId !== newTraccarId) {
+        if (newTraccarId) {
+          // Yeni cihaz eşleştir
+          const linkRes = await fetch('/api/traccar/sync?action=link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vehicleId: selectedVehicle.id,
+              traccarDeviceId: newTraccarId
+            })
+          });
+          
+          if (!linkRes.ok) {
+            const err = await linkRes.json();
+            throw new Error(err.message || 'Traccar eşleştirmesi başarısız');
+          }
+        } else if (oldTraccarId) {
+          // Eşleştirmeyi kaldır
+          const unlinkRes = await fetch('/api/traccar/sync?action=unlink', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vehicleId: selectedVehicle.id
+            })
+          });
+          
+          if (!unlinkRes.ok) {
+            throw new Error('Traccar eşleştirmesi kaldırılamadı');
+          }
+        }
+      }
+      
+      appStore.addNotification('success', 'Başarılı', 'Araç güncellendi');
+      showEditModal = false;
+      fetchVehicles();
+    } catch (err: any) {
+      appStore.addNotification('error', 'Hata', err.message || 'Araç güncellenemedi');
     }
   }
   
@@ -181,6 +267,7 @@
           <tr>
             <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider">Araç</th>
             <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider">Plaka</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider">Traccar Cihaz</th>
             <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider">Durum</th>
             <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider">Hız</th>
             <th class="px-6 py-4 text-left text-xs font-semibold text-dark-400 uppercase tracking-wider">Bugün</th>
@@ -192,14 +279,14 @@
         <tbody class="divide-y divide-dark-700">
           {#if loading}
             <tr>
-              <td colspan="8" class="px-6 py-12 text-center text-dark-400">
+              <td colspan="9" class="px-6 py-12 text-center text-dark-400">
                 <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full mx-auto mb-2"></div>
                 Yükleniyor...
               </td>
             </tr>
           {:else if vehicles.length === 0}
             <tr>
-              <td colspan="8" class="px-6 py-12 text-center text-dark-400">
+              <td colspan="9" class="px-6 py-12 text-center text-dark-400">
                 <div class="text-4xl mb-2">🚐</div>
                 Henüz araç eklenmemiş
               </td>
@@ -215,6 +302,16 @@
                   </div>
                 </td>
                 <td class="px-6 py-4 text-dark-300">{vehicle.plateNumber}</td>
+                <td class="px-6 py-4">
+                  {#if vehicle.traccarDevice}
+                    <div class="flex items-center gap-2">
+                      <span class="w-2 h-2 rounded-full {vehicle.traccarDevice.status === 'online' ? 'bg-green-500' : 'bg-gray-500'}"></span>
+                      <span class="text-dark-300 text-sm">{vehicle.traccarDevice.name}</span>
+                    </div>
+                  {:else}
+                    <span class="text-dark-500 text-sm italic">Eşleştirilmemiş</span>
+                  {/if}
+                </td>
                 <td class="px-6 py-4">
                   <span class="px-3 py-1 rounded-full text-xs font-medium {badge.bg} {badge.text}">
                     {badge.label}
@@ -324,7 +421,7 @@
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" role="dialog" aria-modal="true" tabindex="-1" onclick={() => showEditModal = false} onkeydown={(e) => e.key === 'Escape' && (showEditModal = false)}>
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div class="bg-dark-800 rounded-2xl p-6 w-[450px] shadow-2xl border border-dark-700" role="document" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
+    <div class="bg-dark-800 rounded-2xl p-6 w-[500px] shadow-2xl border border-dark-700 max-h-[90vh] overflow-y-auto" role="document" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
       <h3 class="text-xl font-bold mb-6">✏️ Araç Düzenle</h3>
       
       <div class="space-y-4">
@@ -358,6 +455,49 @@
             <option value="offline">Çevrimdışı</option>
             <option value="maintenance">Bakımda</option>
           </select>
+        </div>
+        
+        <!-- Traccar Cihaz Eşleştirme -->
+        <div class="pt-4 border-t border-dark-700">
+          <label for="edit-traccar" class="block text-sm text-dark-400 mb-2">
+            📡 Traccar GPS Cihazı
+          </label>
+          <select
+            id="edit-traccar"
+            bind:value={formData.traccarId}
+            class="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-xl focus:outline-none focus:border-primary-500 transition-colors"
+          >
+            <option value={null}>-- Cihaz Seçilmedi --</option>
+            {#if selectedVehicle.traccarDevice}
+              <!-- Mevcut eşleştirilmiş cihaz -->
+              <option value={selectedVehicle.traccarId}>
+                ✓ {selectedVehicle.traccarDevice.name} (Mevcut)
+              </option>
+            {/if}
+            {#each unlinkedDevices as device}
+              <option value={device.id}>
+                {device.name} ({device.status === 'online' ? '🟢 Çevrimiçi' : '⚫ Çevrimdışı'})
+              </option>
+            {/each}
+          </select>
+          
+          {#if selectedVehicle.traccarDevice}
+            <div class="mt-2 p-3 bg-dark-700/50 rounded-lg">
+              <div class="flex items-center gap-2 text-sm">
+                <span class="w-2 h-2 rounded-full {selectedVehicle.traccarDevice.status === 'online' ? 'bg-green-500' : 'bg-gray-500'}"></span>
+                <span class="text-dark-300">Mevcut: {selectedVehicle.traccarDevice.name}</span>
+                <span class="text-dark-500">({selectedVehicle.traccarDevice.uniqueId})</span>
+              </div>
+            </div>
+          {:else}
+            <p class="mt-2 text-xs text-dark-500">
+              Bu araca henüz bir GPS cihazı eşleştirilmemiş. Traccar'da tanımlı cihazlardan birini seçebilirsiniz.
+            </p>
+          {/if}
+          
+          {#if loadingTraccar}
+            <p class="mt-2 text-xs text-dark-400 animate-pulse">Traccar cihazları yükleniyor...</p>
+          {/if}
         </div>
       </div>
       

@@ -27,10 +27,10 @@ function saveSetting(key: string, value: unknown): void {
 }
 
 // Uygulama modu: demo veya live
-let appMode = $state<"demo" | "live">("demo");
+let appMode = $state<"demo" | "live">("live");
 
 // Demo modu aktif mi (ayarlardan kapatılabilir)
-let demoEnabled = $state(true);
+let demoEnabled = $state(false);
 
 // Çevrimdışı araçları göster
 let showOfflineVehicles = $state(true);
@@ -43,7 +43,7 @@ let sidebarOpen = $state(true);
 
 // Browser'da ayarları yükle
 if (browser) {
-  demoEnabled = loadSetting("demoEnabled", true);
+  demoEnabled = loadSetting("demoEnabled", false);
   showOfflineVehicles = loadSetting("showOfflineVehicles", true);
   soundEnabled = loadSetting("soundEnabled", true);
 }

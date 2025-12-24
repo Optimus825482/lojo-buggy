@@ -4,10 +4,12 @@
   // State
   let loading = $state(true);
   let syncing = $state(false);
+  let syncingGeofences = $state(false);
   let traccarStatus = $state<any>(null);
   let mappings = $state<any[]>([]);
   let unlinkedDevices = $state<any[]>([]);
   let summary = $state<any>(null);
+  let geofenceSyncStatus = $state<any>(null);
   let error = $state<string | null>(null);
   let successMessage = $state<string | null>(null);
   let lastSyncResult = $state<any[]>([]);
@@ -44,11 +46,26 @@
         unlinkedDevices = syncData.data.unlinkedDevices;
         summary = syncData.data.summary;
       }
+
+      // Geofence senkronizasyon durumu
+      await fetchGeofenceSyncStatus();
     } catch (err) {
       error = 'Veri yüklenirken hata oluştu';
       console.error(err);
     } finally {
       loading = false;
+    }
+  }
+
+  async function fetchGeofenceSyncStatus() {
+    try {
+      const res = await fetch('/api/traccar/geofence-sync');
+      const data = await res.json();
+      if (data.success) {
+        geofenceSyncStatus = data.data;
+      }
+    } catch (err) {
+      console.error('Geofence sync status error:', err);
     }
   }
 
@@ -121,6 +138,53 @@
       }
     } catch (err) {
       error = 'Eşleştirme kaldırma hatası';
+    }
+  }
+
+  async function syncGeofences(force = false) {
+    syncingGeofences = true;
+    error = null;
+    successMessage = null;
+
+    try {
+      const url = force ? '/api/traccar/geofence-sync?force=true' : '/api/traccar/geofence-sync';
+      const res = await fetch(url, { method: 'POST' });
+      const data = await res.json();
+
+      if (data.success) {
+        successMessage = `Geofence senkronizasyonu tamamlandı: ${data.data.created} oluşturuldu, ${data.data.updated} güncellendi, ${data.data.linked} bağlantı yapıldı`;
+        await fetchGeofenceSyncStatus();
+      } else {
+        error = data.message;
+      }
+    } catch (err) {
+      error = 'Geofence senkronizasyon hatası';
+    } finally {
+      syncingGeofences = false;
+    }
+  }
+
+  async function deleteAllGeofences() {
+    if (!confirm('Traccar\'daki tüm Buggy Shuttle geofence\'lerini silmek istediğinize emin misiniz?')) return;
+
+    syncingGeofences = true;
+    error = null;
+    successMessage = null;
+
+    try {
+      const res = await fetch('/api/traccar/geofence-sync', { method: 'DELETE' });
+      const data = await res.json();
+
+      if (data.success) {
+        successMessage = data.message;
+        await fetchGeofenceSyncStatus();
+      } else {
+        error = data.message;
+      }
+    } catch (err) {
+      error = 'Geofence silme hatası';
+    } finally {
+      syncingGeofences = false;
     }
   }
 
@@ -261,6 +325,124 @@
           {/if}
         </div>
 
+      </div>
+
+      <!-- Traccar Geofence Senkronizasyonu -->
+      <div class="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+        <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+          🎯 Traccar Geofence Senkronizasyonu
+        </h2>
+        <p class="text-sm text-slate-400 mb-4">
+          Buggy Shuttle duraklarını Traccar'a geofence olarak senkronize eder. Bu sayede Traccar otomatik olarak 
+          araçların durağa giriş/çıkış event'lerini üretir.
+        </p>
+
+        {#if geofenceSyncStatus}
+          <!-- Sync Status Summary -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div class="bg-slate-700/50 rounded-lg p-3 text-center">
+              <div class="text-xl font-bold text-white">{geofenceSyncStatus.summary?.totalStops || 0}</div>
+              <div class="text-xs text-slate-400">Toplam Durak</div>
+            </div>
+            <div class="bg-slate-700/50 rounded-lg p-3 text-center">
+              <div class="text-xl font-bold text-green-400">{geofenceSyncStatus.summary?.syncedStops || 0}</div>
+              <div class="text-xs text-slate-400">Senkronize</div>
+            </div>
+            <div class="bg-slate-700/50 rounded-lg p-3 text-center">
+              <div class="text-xl font-bold text-yellow-400">{geofenceSyncStatus.summary?.notSyncedStops || 0}</div>
+              <div class="text-xs text-slate-400">Bekleyen</div>
+            </div>
+            <div class="bg-slate-700/50 rounded-lg p-3 text-center">
+              <div class="text-xl font-bold text-cyan-400">{geofenceSyncStatus.summary?.bsGeofences || 0}</div>
+              <div class="text-xs text-slate-400">Traccar Geofence</div>
+            </div>
+          </div>
+
+          <!-- Stops List -->
+          {#if geofenceSyncStatus.stops && geofenceSyncStatus.stops.length > 0}
+            <div class="bg-slate-700/30 rounded-lg p-3 mb-4 max-h-48 overflow-y-auto">
+              <div class="text-xs text-slate-400 mb-2">Durak Senkronizasyon Durumu:</div>
+              <div class="space-y-1">
+                {#each geofenceSyncStatus.stops as stop}
+                  <div class="flex items-center justify-between text-sm py-1 px-2 rounded {stop.synced ? 'bg-green-500/10' : 'bg-yellow-500/10'}">
+                    <span class="flex items-center gap-2">
+                      <span class="w-2 h-2 rounded-full {stop.synced ? 'bg-green-500' : 'bg-yellow-500'}"></span>
+                      {stop.stopName}
+                    </span>
+                    <span class="text-xs text-slate-500">
+                      {stop.synced ? `✓ ID: ${stop.traccarGeofenceId}` : 'Senkronize edilmedi'}
+                    </span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <!-- Orphan Geofences Warning -->
+          {#if geofenceSyncStatus.orphanGeofences && geofenceSyncStatus.orphanGeofences.length > 0}
+            <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-4">
+              <div class="text-yellow-400 text-sm font-medium mb-1">⚠️ Yetim Geofence'ler</div>
+              <p class="text-xs text-slate-400 mb-2">
+                Bu geofence'ler Traccar'da var ama Buggy Shuttle'da karşılığı yok:
+              </p>
+              <div class="text-xs text-slate-500">
+                {geofenceSyncStatus.orphanGeofences.map((g: any) => g.name).join(', ')}
+              </div>
+            </div>
+          {/if}
+        {/if}
+
+        <!-- Action Buttons -->
+        <div class="flex flex-wrap gap-3">
+          <button
+            onclick={() => syncGeofences(false)}
+            disabled={syncingGeofences || !traccarStatus?.connected}
+            class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            {#if syncingGeofences}
+              <div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+            {:else}
+              🔄
+            {/if}
+            Senkronize Et
+          </button>
+          
+          <button
+            onclick={() => syncGeofences(true)}
+            disabled={syncingGeofences || !traccarStatus?.connected}
+            class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            🔃 Yeniden Oluştur
+          </button>
+          
+          <button
+            onclick={deleteAllGeofences}
+            disabled={syncingGeofences || !traccarStatus?.connected}
+            class="px-4 py-2 bg-red-600/20 hover:bg-red-600/40 text-red-400 disabled:bg-slate-600 disabled:text-slate-500 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            🗑️ Tümünü Sil
+          </button>
+          
+          <button
+            onclick={fetchGeofenceSyncStatus}
+            disabled={syncingGeofences}
+            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors"
+          >
+            ↻ Durumu Yenile
+          </button>
+        </div>
+
+        <!-- Info Box -->
+        <div class="mt-4 p-3 bg-cyan-500/10 rounded-lg border border-cyan-500/30">
+          <div class="text-cyan-400 text-sm font-medium mb-1">ℹ️ Nasıl Çalışır?</div>
+          <ul class="text-xs text-slate-400 space-y-1">
+            <li>• Her durak için Traccar'da bir CIRCLE geofence oluşturulur</li>
+            <li>• Geofence yarıçapı durak ayarlarından alınır (varsayılan: 15m)</li>
+            <li>• Tüm cihazlara bu geofence'ler otomatik bağlanır</li>
+            <li>• Araç durağa girdiğinde/çıktığında Traccar event üretir</li>
+            <li>• Bu event'ler WebSocket üzerinden anlık olarak alınır</li>
+          </ul>
+        </div>
       </div>
 
       <!-- Sync Button & Last Result -->

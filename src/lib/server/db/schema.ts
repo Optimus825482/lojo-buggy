@@ -39,6 +39,29 @@ export const geofenceEventTypeEnum = pgEnum("geofence_event_type", [
   "enter",
   "exit",
 ]);
+export const tripStatusEnum = pgEnum("trip_status", [
+  "active",
+  "completed",
+  "cancelled",
+]);
+export const reportTypeEnum = pgEnum("report_type", [
+  "daily",
+  "weekly",
+  "monthly",
+  "custom",
+  "vehicle",
+  "trip",
+]);
+export const reportFormatEnum = pgEnum("report_format", [
+  "pdf",
+  "excel",
+  "json",
+]);
+export const scheduleFrequencyEnum = pgEnum("schedule_frequency", [
+  "daily",
+  "weekly",
+  "monthly",
+]);
 
 // Vehicles Table
 export const vehicles = pgTable("vehicles", {
@@ -54,6 +77,8 @@ export const vehicles = pgTable("vehicles", {
   gpsSignal: boolean("gps_signal").notNull().default(false),
   traccarId: integer("traccar_id").unique(),
   currentTaskId: integer("current_task_id"),
+  lastGeofenceStopId: integer("last_geofence_stop_id"), // Son temas edilen durak
+  lastTraccarUpdate: timestamp("last_traccar_update"), // Son Traccar güncellemesi
   lastUpdate: timestamp("last_update").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -165,6 +190,88 @@ export const systemSettings = pgTable("system_settings", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// Trips Table (Phase 2 - Otomatik Trip Detection)
+export const trips = pgTable("trips", {
+  id: serial("id").primaryKey(),
+  vehicleId: integer("vehicle_id")
+    .notNull()
+    .references(() => vehicles.id),
+  status: tripStatusEnum("status").notNull().default("active"),
+  startTime: timestamp("start_time").notNull().defaultNow(),
+  endTime: timestamp("end_time"),
+  startLat: real("start_lat").notNull(),
+  startLng: real("start_lng").notNull(),
+  endLat: real("end_lat"),
+  endLng: real("end_lng"),
+  startStopId: integer("start_stop_id").references(() => stops.id),
+  endStopId: integer("end_stop_id").references(() => stops.id),
+  distance: real("distance").default(0), // metre
+  maxSpeed: real("max_speed").default(0), // km/h
+  avgSpeed: real("avg_speed").default(0), // km/h
+  duration: integer("duration").default(0), // saniye
+  traccarTripId: integer("traccar_trip_id"), // Traccar trip ID (varsa)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Reports Table (Phase 3 - Raporlama)
+export const reports = pgTable("reports", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 200 }).notNull(),
+  type: reportTypeEnum("type").notNull(),
+  format: reportFormatEnum("format").notNull().default("pdf"),
+  dateFrom: timestamp("date_from").notNull(),
+  dateTo: timestamp("date_to").notNull(),
+  vehicleId: integer("vehicle_id").references(() => vehicles.id), // null = tüm araçlar
+  filePath: varchar("file_path", { length: 500 }),
+  fileSize: integer("file_size"), // bytes
+  generatedAt: timestamp("generated_at"),
+  emailSentTo: text("email_sent_to"), // JSON array of emails
+  emailSentAt: timestamp("email_sent_at"),
+  scheduledReportId: integer("scheduled_report_id"), // Otomatik oluşturulduysa
+  metadata: text("metadata"), // JSON - ek bilgiler
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Scheduled Reports Table (Otomatik Rapor Planlama)
+export const scheduledReports = pgTable("scheduled_reports", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 200 }).notNull(),
+  type: reportTypeEnum("type").notNull(),
+  format: reportFormatEnum("format").notNull().default("pdf"),
+  frequency: scheduleFrequencyEnum("frequency").notNull(),
+  vehicleId: integer("vehicle_id").references(() => vehicles.id), // null = tüm araçlar
+  emailRecipients: text("email_recipients").notNull(), // JSON array of emails
+  isActive: boolean("is_active").notNull().default(true),
+  lastRunAt: timestamp("last_run_at"),
+  nextRunAt: timestamp("next_run_at"),
+  runTime: varchar("run_time", { length: 5 }).notNull().default("08:00"), // HH:mm
+  dayOfWeek: integer("day_of_week"), // 0-6 (Pazar-Cumartesi) - haftalık için
+  dayOfMonth: integer("day_of_month"), // 1-31 - aylık için
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// SMTP Settings Table (Email Ayarları)
+export const smtpSettings = pgTable("smtp_settings", {
+  id: serial("id").primaryKey(),
+  host: varchar("host", { length: 255 }).notNull(),
+  port: integer("port").notNull().default(587),
+  secure: boolean("secure").notNull().default(false), // true = SSL/TLS
+  username: varchar("username", { length: 255 }).notNull(),
+  password: varchar("password", { length: 255 }).notNull(), // Şifrelenmiş
+  fromEmail: varchar("from_email", { length: 255 }).notNull(),
+  fromName: varchar("from_name", { length: 100 })
+    .notNull()
+    .default("Buggy Shuttle"),
+  isActive: boolean("is_active").notNull().default(true),
+  lastTestAt: timestamp("last_test_at"),
+  lastTestResult: boolean("last_test_result"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Relations
 export const vehiclesRelations = relations(vehicles, ({ one, many }) => ({
   currentTask: one(tasks, {
@@ -175,6 +282,7 @@ export const vehiclesRelations = relations(vehicles, ({ one, many }) => ({
   calls: many(calls),
   geofenceEvents: many(geofenceEvents),
   positions: many(vehiclePositions),
+  trips: many(trips),
 }));
 
 export const stopsRelations = relations(stops, ({ many }) => ({
@@ -182,6 +290,8 @@ export const stopsRelations = relations(stops, ({ many }) => ({
   pickupTasks: many(tasks, { relationName: "pickupStop" }),
   dropoffTasks: many(tasks, { relationName: "dropoffStop" }),
   geofenceEvents: many(geofenceEvents),
+  startTrips: many(trips, { relationName: "startStop" }),
+  endTrips: many(trips, { relationName: "endStop" }),
 }));
 
 export const callsRelations = relations(calls, ({ one }) => ({
@@ -229,6 +339,45 @@ export const vehiclePositionsRelations = relations(
   })
 );
 
+export const tripsRelations = relations(trips, ({ one }) => ({
+  vehicle: one(vehicles, {
+    fields: [trips.vehicleId],
+    references: [vehicles.id],
+  }),
+  startStop: one(stops, {
+    fields: [trips.startStopId],
+    references: [stops.id],
+    relationName: "startStop",
+  }),
+  endStop: one(stops, {
+    fields: [trips.endStopId],
+    references: [stops.id],
+    relationName: "endStop",
+  }),
+}));
+
+export const reportsRelations = relations(reports, ({ one }) => ({
+  vehicle: one(vehicles, {
+    fields: [reports.vehicleId],
+    references: [vehicles.id],
+  }),
+  scheduledReport: one(scheduledReports, {
+    fields: [reports.scheduledReportId],
+    references: [scheduledReports.id],
+  }),
+}));
+
+export const scheduledReportsRelations = relations(
+  scheduledReports,
+  ({ one, many }) => ({
+    vehicle: one(vehicles, {
+      fields: [scheduledReports.vehicleId],
+      references: [vehicles.id],
+    }),
+    reports: many(reports),
+  })
+);
+
 // Type exports
 export type Vehicle = typeof vehicles.$inferSelect;
 export type NewVehicle = typeof vehicles.$inferInsert;
@@ -241,3 +390,11 @@ export type NewTask = typeof tasks.$inferInsert;
 export type GeofenceEvent = typeof geofenceEvents.$inferSelect;
 export type DailyStat = typeof dailyStats.$inferSelect;
 export type SystemSetting = typeof systemSettings.$inferSelect;
+export type Trip = typeof trips.$inferSelect;
+export type NewTrip = typeof trips.$inferInsert;
+export type Report = typeof reports.$inferSelect;
+export type NewReport = typeof reports.$inferInsert;
+export type ScheduledReport = typeof scheduledReports.$inferSelect;
+export type NewScheduledReport = typeof scheduledReports.$inferInsert;
+export type SmtpSetting = typeof smtpSettings.$inferSelect;
+export type NewSmtpSetting = typeof smtpSettings.$inferInsert;

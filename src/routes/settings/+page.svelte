@@ -18,7 +18,7 @@
   
   let loading = $state(true);
   let saving = $state(false);
-  let activeTab = $state<'general' | 'traccar' | 'notifications' | 'system'>('general');
+  let activeTab = $state<'general' | 'traccar' | 'notifications' | 'email' | 'reports' | 'system'>('general');
   
   async function fetchSettings() {
     loading = true;
@@ -57,6 +57,8 @@
         { id: 'general', icon: '🎛️', label: 'Genel Ayarlar' },
         { id: 'traccar', icon: '📡', label: 'Traccar Entegrasyonu' },
         { id: 'notifications', icon: '🔔', label: 'Bildirimler' },
+        { id: 'email', icon: '📧', label: 'Email (SMTP)' },
+        { id: 'reports', icon: '📊', label: 'Raporlar' },
         { id: 'system', icon: '🖥️', label: 'Sistem' }
       ] as tab}
         <button onclick={() => activeTab = tab.id as typeof activeTab}
@@ -149,6 +151,84 @@
               class="w-14 h-7 rounded-full transition-colors {settings.notificationSound ? 'bg-primary-500' : 'bg-dark-600'}">
               <div class="w-6 h-6 bg-white rounded-full shadow transition-transform {settings.notificationSound ? 'translate-x-7' : 'translate-x-0.5'}"></div>
             </button>
+          </div>
+        </div>
+      {:else if activeTab === 'email'}
+        <h2 class="text-lg font-semibold mb-6">📧 Email (SMTP) Ayarları</h2>
+        <div class="space-y-6">
+          <a 
+            href="/settings/smtp"
+            class="block p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl hover:bg-cyan-500/20 transition-colors"
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-2xl">📧</span>
+                <div>
+                  <div class="font-medium text-cyan-400">SMTP Yapılandırması</div>
+                  <p class="text-sm text-dark-400 mt-1">Email sunucu ayarları ve test</p>
+                </div>
+              </div>
+              <span class="text-cyan-400 text-xl">→</span>
+            </div>
+          </a>
+          
+          <div class="p-4 bg-dark-700/50 border border-dark-600 rounded-xl">
+            <div class="flex items-start gap-3">
+              <span class="text-xl">ℹ️</span>
+              <div>
+                <div class="font-medium text-dark-300">Email Kullanım Alanları</div>
+                <ul class="text-sm text-dark-400 mt-2 space-y-1">
+                  <li>• Otomatik rapor gönderimi</li>
+                  <li>• Zamanlanmış raporlar</li>
+                  <li>• Sistem bildirimleri</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      {:else if activeTab === 'reports'}
+        <h2 class="text-lg font-semibold mb-6">📊 Raporlama</h2>
+        <div class="space-y-6">
+          <a 
+            href="/reports"
+            class="block p-4 bg-green-500/10 border border-green-500/30 rounded-xl hover:bg-green-500/20 transition-colors"
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-2xl">📊</span>
+                <div>
+                  <div class="font-medium text-green-400">Rapor Merkezi</div>
+                  <p class="text-sm text-dark-400 mt-1">Rapor oluşturma, planlama ve dışa aktarma</p>
+                </div>
+              </div>
+              <span class="text-green-400 text-xl">→</span>
+            </div>
+          </a>
+          
+          <div class="grid grid-cols-2 gap-4">
+            <div class="p-4 bg-dark-700/50 rounded-xl">
+              <div class="text-2xl mb-2">📄</div>
+              <div class="font-medium">Tek Seferlik Rapor</div>
+              <p class="text-xs text-dark-500 mt-1">PDF veya Excel formatında anlık rapor</p>
+            </div>
+            <div class="p-4 bg-dark-700/50 rounded-xl">
+              <div class="text-2xl mb-2">⏰</div>
+              <div class="font-medium">Zamanlanmış Rapor</div>
+              <p class="text-xs text-dark-500 mt-1">Günlük, haftalık veya aylık otomatik rapor</p>
+            </div>
+          </div>
+          
+          <div class="p-4 bg-dark-700/50 border border-dark-600 rounded-xl">
+            <div class="flex items-start gap-3">
+              <span class="text-xl">📁</span>
+              <div>
+                <div class="font-medium text-dark-300">Desteklenen Formatlar</div>
+                <div class="flex gap-2 mt-2">
+                  <span class="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs">PDF</span>
+                  <span class="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs">Excel</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       {:else if activeTab === 'system'}

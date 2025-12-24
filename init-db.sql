@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS vehicles (
     gps_signal BOOLEAN NOT NULL DEFAULT false,
     traccar_id INTEGER UNIQUE,
     current_task_id INTEGER,
+    last_geofence_stop_id INTEGER,
+    last_traccar_update TIMESTAMP,
     last_update TIMESTAMP NOT NULL DEFAULT NOW(),
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
