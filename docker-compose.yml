@@ -21,6 +21,7 @@ services:
       PUBLIC_MAP_ZOOM: ${PUBLIC_MAP_ZOOM:-17}
       GEOFENCE_DEFAULT_RADIUS: ${GEOFENCE_DEFAULT_RADIUS:-15}
       GPS_UPDATE_INTERVAL: ${GPS_UPDATE_INTERVAL:-10000}
+      SERVICE_FQDN_APP: ${SERVICE_FQDN_APP:-lujo.optimistdemo.cloud}
     depends_on:
       db:
         condition: service_healthy
