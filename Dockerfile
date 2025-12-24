@@ -43,10 +43,6 @@ COPY --from=builder --chown=sveltekit:nodejs /app/build ./build
 COPY --from=builder --chown=sveltekit:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=sveltekit:nodejs /app/package.json ./
 
-# Copy drizzle migrations (if any)
-COPY --from=builder --chown=sveltekit:nodejs /app/drizzle ./drizzle
-COPY --from=builder --chown=sveltekit:nodejs /app/drizzle.config.ts ./
-
 # Copy static files
 COPY --from=builder --chown=sveltekit:nodejs /app/static ./static
 
