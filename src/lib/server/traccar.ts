@@ -12,11 +12,12 @@
  * @see https://www.traccar.org/api-reference/
  */
 
-import {
-  TRACCAR_URL,
-  TRACCAR_USER,
-  TRACCAR_PASSWORD,
-} from "$env/static/private";
+import { env } from "$env/dynamic/private";
+
+// Environment variables with defaults
+const TRACCAR_URL = env.TRACCAR_URL || "https://traccar.optimistdemo.cloud";
+const TRACCAR_USER = env.TRACCAR_USER || "admin";
+const TRACCAR_PASSWORD = env.TRACCAR_PASSWORD || "admin";
 
 // ============================================================================
 // TYPES - Traccar API v6.11.1 Schema

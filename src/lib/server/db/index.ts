@@ -6,10 +6,13 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { eq, and, desc, asc, sql, gte, count, or } from "drizzle-orm";
 import * as schema from "./schema";
-import { DATABASE_URL } from "$env/static/private";
+import { env } from "$env/dynamic/private";
 
 // postgres.js client oluştur
-const client = postgres(DATABASE_URL);
+const client = postgres(
+  env.DATABASE_URL ||
+    "postgresql://postgres:postgres@localhost:5432/buggy_shuttle"
+);
 
 // Drizzle instance - schema ile birlikte
 export const db = drizzle(client, { schema });

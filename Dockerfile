@@ -20,6 +20,9 @@ COPY . .
 # Clear any cached build artifacts
 RUN rm -rf .svelte-kit build
 
+# Set dummy DATABASE_URL for build (actual value comes from runtime env)
+ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/buggy_shuttle"
+
 # Build the application
 RUN npm run build
 
