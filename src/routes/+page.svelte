@@ -1299,6 +1299,7 @@
         <div class="flex items-center gap-2 flex-1 overflow-x-auto pb-1">
           {#each vehicles as vehicle}
             {@const activeTask = getVehicleActiveTask(vehicle.id)}
+            {@const currentStopName = vehicle.currentStop?.name}
             <button 
               onclick={(e) => handleVehicleClick(vehicle, e)}
               oncontextmenu={(e) => handleVehicleContextMenu(vehicle, e)}
@@ -1308,7 +1309,17 @@
               <div class="w-6 h-6 rounded-full flex items-center justify-center text-sm" style="background-color: {getVehicleColor(vehicle.status)}">🚐</div>
               <span class="text-xs text-white font-medium">{vehicle.name}</span>
               <span class="text-[10px] px-1.5 py-0.5 rounded-full" style="background-color: {getVehicleColor(vehicle.status)}30; color: {getVehicleColor(vehicle.status)}">
-                {vehicle.status === 'available' ? 'Müsait' : vehicle.status === 'busy' ? 'Görevde' : 'Çevrimdışı'}
+                {#if vehicle.status === 'busy'}
+                  Görevde
+                {:else if vehicle.status === 'offline'}
+                  Çevrimdışı
+                {:else if vehicle.status === 'maintenance'}
+                  Bakımda
+                {:else if currentStopName}
+                  📍 {currentStopName}
+                {:else}
+                  Müsait
+                {/if}
               </span>
               {#if vehicle.status === 'available' && getPendingCalls().length > 0}
                 <span class="text-[10px] text-green-400">+</span>

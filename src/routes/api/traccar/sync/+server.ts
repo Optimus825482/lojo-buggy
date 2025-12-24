@@ -8,10 +8,12 @@
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 import * as traccar from "$lib/server/traccar";
+import * as dbFunctions from "$lib/server/db";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
 import { eq } from "drizzle-orm";
 import { fullCorrection, correctHeading } from "$lib/server/gps-correction";
+import { calculateDistance } from "$lib/utils/geo";
 
 export const POST: RequestHandler = async ({ request, url }) => {
   const action = url.searchParams.get("action");
@@ -185,6 +187,40 @@ export const POST: RequestHandler = async ({ request, url }) => {
                 heading: finalHeading,
                 deviceStatus: device?.status,
               });
+
+              // Geofence kontrolü - tüm duraklar için
+              for (const stop of stops) {
+                const distance = calculateDistance(
+                  { lat: finalLat, lng: finalLng },
+                  { lat: stop.lat, lng: stop.lng }
+                );
+
+                const geofenceRadius = stop.geofenceRadius || 15;
+                const isInside = distance <= geofenceRadius;
+
+                if (isInside) {
+                  // Son event'i kontrol et
+                  const lastEvent = await dbFunctions.getLastGeofenceEvent(
+                    vehicle.id,
+                    stop.id
+                  );
+                  const shouldTrigger =
+                    !lastEvent ||
+                    lastEvent.type === "exit" ||
+                    Date.now() - new Date(lastEvent.timestamp).getTime() >
+                      60000;
+
+                  if (shouldTrigger) {
+                    // Enter event kaydet
+                    await dbFunctions.createGeofenceEvent({
+                      vehicleId: vehicle.id,
+                      stopId: stop.id,
+                      type: "enter",
+                      distance,
+                    });
+                  }
+                }
+              }
             }
           } else if (device?.status === "offline") {
             // Cihaz offline ise aracı da offline yap

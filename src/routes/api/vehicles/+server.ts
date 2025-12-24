@@ -8,11 +8,22 @@ import { json, error } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 import * as db from "$lib/server/db";
 
-// GET - Tüm araçları listele
+// GET - Tüm araçları listele (mevcut durak bilgisi ile)
 export const GET: RequestHandler = async ({ url }) => {
   try {
     const status = url.searchParams.get("status") ?? undefined;
-    const vehicles = await db.getAllVehicles(status);
+    const withCurrentStop = url.searchParams.get("withCurrentStop") !== "false";
+
+    let vehicles;
+    if (withCurrentStop) {
+      // Mevcut durak bilgisi ile birlikte getir
+      const allVehicles = await db.getAllVehiclesWithCurrentStop();
+      vehicles = status
+        ? allVehicles.filter((v) => v.status === status)
+        : allVehicles;
+    } else {
+      vehicles = await db.getAllVehicles(status);
+    }
 
     return json({
       success: true,

@@ -1005,3 +1005,64 @@ export async function getLastGeofenceEvent(vehicleId: number, stopId: number) {
 
   return result[0] ?? null;
 }
+
+// Araç için en son girilen durağı bul (enter event)
+export async function getVehicleCurrentStop(vehicleId: number) {
+  const result = await db
+    .select({
+      event: schema.geofenceEvents,
+      stop: schema.stops,
+    })
+    .from(schema.geofenceEvents)
+    .leftJoin(schema.stops, eq(schema.geofenceEvents.stopId, schema.stops.id))
+    .where(
+      and(
+        eq(schema.geofenceEvents.vehicleId, vehicleId),
+        eq(schema.geofenceEvents.type, "enter")
+      )
+    )
+    .orderBy(desc(schema.geofenceEvents.timestamp))
+    .limit(1);
+
+  return result[0]?.stop ?? null;
+}
+
+// Tüm araçlar için mevcut durak bilgisini getir (batch)
+export async function getAllVehiclesWithCurrentStop() {
+  // Önce tüm araçları al
+  const allVehicles = await db
+    .select()
+    .from(schema.vehicles)
+    .orderBy(asc(schema.vehicles.id));
+
+  // Her araç için en son enter event'ini bul
+  const vehiclesWithStops = await Promise.all(
+    allVehicles.map(async (vehicle) => {
+      const lastEnterEvent = await db
+        .select({
+          event: schema.geofenceEvents,
+          stop: schema.stops,
+        })
+        .from(schema.geofenceEvents)
+        .leftJoin(
+          schema.stops,
+          eq(schema.geofenceEvents.stopId, schema.stops.id)
+        )
+        .where(
+          and(
+            eq(schema.geofenceEvents.vehicleId, vehicle.id),
+            eq(schema.geofenceEvents.type, "enter")
+          )
+        )
+        .orderBy(desc(schema.geofenceEvents.timestamp))
+        .limit(1);
+
+      return {
+        ...vehicle,
+        currentStop: lastEnterEvent[0]?.stop ?? null,
+      };
+    })
+  );
+
+  return vehiclesWithStops;
+}
