@@ -544,6 +544,23 @@
 
     // Vehicle markers - daha yüksek z-index
     vehicles.forEach(vehicle => {
+      // Çevrimdışı araçları gizle/göster kontrolü
+      const isOffline = vehicle.status === 'offline';
+      const shouldShow = !isOffline || appStore.showOfflineVehicles;
+      
+      // Mevcut marker varsa ve gizlenmesi gerekiyorsa
+      if (vehicleMarkers.has(vehicle.id)) {
+        const existingMarker = vehicleMarkers.get(vehicle.id)!;
+        if (!shouldShow) {
+          existingMarker.getElement().style.display = 'none';
+          return;
+        } else {
+          existingMarker.getElement().style.display = 'flex';
+        }
+      } else if (!shouldShow) {
+        return; // Yeni marker oluşturma
+      }
+      
       const el = document.createElement('div');
       el.className = 'w-10 h-10 rounded-full flex items-center justify-center text-xl shadow-lg border-2 border-white cursor-pointer transition-transform hover:scale-110';
       el.style.backgroundColor = getVehicleColor(vehicle.status);
@@ -1223,6 +1240,10 @@
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={showStops} onchange={toggleStops} class="w-4 h-4 rounded bg-slate-700 border-slate-600 text-teal-500 focus:ring-teal-500" />
                   <span class="text-sm text-slate-300">🚏 Durakları Göster</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={appStore.showOfflineVehicles} onchange={() => { appStore.toggleShowOfflineVehicles(); updateMarkers(); }} class="w-4 h-4 rounded bg-slate-700 border-slate-600 text-teal-500 focus:ring-teal-500" />
+                  <span class="text-sm text-slate-300">🔌 Çevrimdışı Araçları Göster</span>
                 </label>
               </div>
               

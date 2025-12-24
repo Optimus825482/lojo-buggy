@@ -38,7 +38,8 @@
           </div>
         </a>
 
-        <!-- Mode Toggle -->
+        <!-- Mode Toggle - Sadece demo aktifse göster -->
+        {#if appStore.demoEnabled}
         <div class="hidden md:flex items-center gap-1 ml-6 px-1 py-1 bg-dark-800 rounded-lg border border-dark-700">
           <button
             onclick={() => appStore.setMode('demo')}
@@ -53,6 +54,7 @@
             🔴 CANLI
           </button>
         </div>
+        {/if}
       </div>
 
       <!-- Desktop Navigation -->
@@ -73,13 +75,15 @@
 
       <!-- Right Side -->
       <div class="flex items-center gap-3">
-        <!-- Status Indicator -->
+        <!-- Status Indicator - Sadece demo aktifse göster -->
+        {#if appStore.demoEnabled}
         <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-dark-800 rounded-lg border {appStore.isDemo ? 'border-yellow-500/30' : 'border-green-500/30'}">
           <div class="w-2 h-2 rounded-full {appStore.isDemo ? 'bg-yellow-500' : 'bg-green-500'} animate-pulse"></div>
           <span class="text-xs font-medium {appStore.isDemo ? 'text-yellow-400' : 'text-green-400'}">
             {appStore.isDemo ? 'DEMO' : 'CANLI'}
           </span>
         </div>
+        {/if}
 
         <!-- Sound Toggle -->
         <button 
@@ -174,7 +178,8 @@
   {#if mobileMenuOpen}
     <div class="lg:hidden border-t border-dark-700 bg-dark-900">
       <div class="px-4 py-3 space-y-1">
-        <!-- Mode Toggle Mobile -->
+        <!-- Mode Toggle Mobile - Sadece demo aktifse göster -->
+        {#if appStore.demoEnabled}
         <div class="flex items-center gap-2 p-2 mb-3">
           <button
             onclick={() => appStore.setMode('demo')}
@@ -189,6 +194,7 @@
             🔴 CANLI
           </button>
         </div>
+        {/if}
 
         {#each navLinks as link}
           <a

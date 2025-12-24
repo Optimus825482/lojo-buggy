@@ -169,9 +169,29 @@
             </div>
             <div class="p-4 bg-dark-700/50 rounded-xl">
               <div class="text-dark-400 text-sm">Mod</div>
-              <div class="font-mono mt-1">{appStore.isDemo ? 'Demo' : 'Canlı'}</div>
+              <div class="font-mono mt-1">{appStore.demoEnabled ? 'Demo Aktif' : 'Canlı'}</div>
             </div>
           </div>
+          
+          <!-- Demo Modu Toggle -->
+          <div class="pt-4 border-t border-dark-700">
+            <div class="flex items-center justify-between max-w-md p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
+              <div>
+                <div class="font-medium text-yellow-400">🎮 Demo Modu</div>
+                <p class="text-xs text-dark-400 mt-1">Demo butonları ve simülasyon özellikleri</p>
+              </div>
+              <button 
+                onclick={() => appStore.toggleDemoEnabled()}
+                aria-label="Demo modu {appStore.demoEnabled ? 'kapalı' : 'açık'}"
+                class="w-14 h-7 rounded-full transition-colors {appStore.demoEnabled ? 'bg-yellow-500' : 'bg-dark-600'}">
+                <div class="w-6 h-6 bg-white rounded-full shadow transition-transform {appStore.demoEnabled ? 'translate-x-7' : 'translate-x-0.5'}"></div>
+              </button>
+            </div>
+            {#if !appStore.demoEnabled}
+              <p class="text-xs text-dark-500 mt-2 ml-1">Demo kapatıldığında arayüzdeki tüm demo butonları gizlenir.</p>
+            {/if}
+          </div>
+          
           <div class="pt-4 border-t border-dark-700">
             <button class="px-4 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg font-medium transition-colors">
               🗑️ Önbelleği Temizle

@@ -4,15 +4,49 @@
 // ============================================
 
 import { playNotificationSound, playSuccessSound } from "$lib/utils/sound";
+import { browser } from "$app/environment";
+
+// LocalStorage'dan ayarları yükle
+function loadSetting<T>(key: string, defaultValue: T): T {
+  if (!browser) return defaultValue;
+  try {
+    const stored = localStorage.getItem(key);
+    return stored !== null ? JSON.parse(stored) : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+function saveSetting(key: string, value: unknown): void {
+  if (!browser) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // localStorage hatası - sessizce geç
+  }
+}
 
 // Uygulama modu: demo veya live
 let appMode = $state<"demo" | "live">("demo");
+
+// Demo modu aktif mi (ayarlardan kapatılabilir)
+let demoEnabled = $state(true);
+
+// Çevrimdışı araçları göster
+let showOfflineVehicles = $state(true);
 
 // Ses ayarı
 let soundEnabled = $state(true);
 
 // Sidebar açık/kapalı
 let sidebarOpen = $state(true);
+
+// Browser'da ayarları yükle
+if (browser) {
+  demoEnabled = loadSetting("demoEnabled", true);
+  showOfflineVehicles = loadSetting("showOfflineVehicles", true);
+  soundEnabled = loadSetting("soundEnabled", true);
+}
 
 // Bildirimler
 interface Notification {
@@ -36,10 +70,16 @@ export const appStore = {
     return appMode;
   },
   get isDemo() {
-    return appMode === "demo";
+    return appMode === "demo" && demoEnabled;
   },
   get isLive() {
     return appMode === "live";
+  },
+  get demoEnabled() {
+    return demoEnabled;
+  },
+  get showOfflineVehicles() {
+    return showOfflineVehicles;
   },
   get sidebarOpen() {
     return sidebarOpen;
@@ -70,6 +110,34 @@ export const appStore = {
     if (appMode === "live") {
       demoSimulationActive = false;
     }
+  },
+
+  // Demo enabled toggle
+  setDemoEnabled(enabled: boolean) {
+    demoEnabled = enabled;
+    saveSetting("demoEnabled", enabled);
+    if (!enabled) {
+      demoSimulationActive = false;
+    }
+  },
+
+  toggleDemoEnabled() {
+    demoEnabled = !demoEnabled;
+    saveSetting("demoEnabled", demoEnabled);
+    if (!demoEnabled) {
+      demoSimulationActive = false;
+    }
+  },
+
+  // Offline vehicles toggle
+  setShowOfflineVehicles(show: boolean) {
+    showOfflineVehicles = show;
+    saveSetting("showOfflineVehicles", show);
+  },
+
+  toggleShowOfflineVehicles() {
+    showOfflineVehicles = !showOfflineVehicles;
+    saveSetting("showOfflineVehicles", showOfflineVehicles);
   },
 
   // Sidebar actions
